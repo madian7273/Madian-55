@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مغامرة الكنز | مدين وأبو وايل</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;900&family=Amiri:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle, #2c3e50, #000000);
+            color: #fff;
+            font-family: 'Cairo', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-family: 'Amiri', serif;
+            color: #D4AF37;
+            text-shadow: 3px 3px 10px rgba(0,0,0,0.5);
+            margin: 10px 0;
+            font-size: 2.5em;
+        }
+
+        #game-container {
+            position: relative;
+            border: 10px solid #D4AF37;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(212, 175, 55, 0.3);
+            background: url('https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=1200') bottom center;
+            background-size: cover;
+        }
+
+        canvas { display: block; background: rgba(0, 0, 0, 0.2); }
+
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            pointer-events: none;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 25px;
+            border-radius: 50px;
+            border: 2px solid #D4AF37;
+            font-size: 1.2em;
+            color: #D4AF37;
+        }
+
+        .controls-hint {
+            margin-top: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 30px;
+            border-radius: 10px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>💰 مغامرة البحث عن كنز الزوجات</h1>
+    
+    <div id="game-container">
+        <div class="ui-panel">
+            <div class="stat-box">الكنوز: <span id="score">0</span> / 4</div>
+            <div class="stat-box">المهمة: ابحث عن صناديق الزوجات</div>
+        </div>
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+    </div>
+
+    <div class="controls-hint">
+        استخدم الأسهم ⬅️ ➡️ للتحرك | السهم العلوي ⬆️ للقفز
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // تعريف الصور بناءً على الأسماء التي تم الاتفاق عليها
+        const images = {
+            madan: new Image(),
+            friend: new Image(),
+            france: new Image(),
+            italy: new Image(),
+            morocco: new Image(),
+            lebanon: new Image()
+        };
+
+        images.madan.src = 'madan.jpg.PNG';
+        images.friend.src = 'friend.jpg.PNG';
+        images.france.src = 'france.jpg.PNG';
+        images.italy.src = 'italy.jpg.PNG';
+        images.morocco.src = 'morocco.jpg.PNG';
+        images.lebanon.src = 'lebanon.jpg.PNG';
+
+        let score = 0;
+        const gravity = 0.8;
+        const player = {
+            x: 50, y: 400, w: 70, h: 70,
+            dx: 0, dy: 0,
+            speed: 7, jumpPower: -16,
+            grounded: false
+        };
+
+        const platforms = [
+            { x: 0, y: 470, w: 900, h: 30 }, // الأرضية
+            { x: 200, y: 350, w: 150, h: 15 },
+            { x: 450, y: 250, w: 150, h: 15 },
+            { x: 100, y: 180, w: 150, h: 15 },
+            { x: 650, y: 350, w: 150, h: 15 },
+            { x: 700, y: 180, w: 150, h: 15 }
+        ];
+
+        const treasures = [
+            { x: 250, y: 300, img: images.france, collected: false, label: 'الفرنسية' },
+            { x: 150, y: 130, img: images.italy, collected: false, label: 'الإيطالية' },
+            { x: 750, y: 130, img: images.morocco, collected: false, label: 'المغربية' },
+            { x: 500, y: 200, img: images.lebanon, collected: false, label: 'اللبنانية' }
+        ];
+
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        function checkCollision(p1, p2) {
+            return p1.x < p2.x + p2.w && p1.x + p1.w > p2.x &&
+                   p1.y < p2.y + p2.h && p1.y + p1.h > p2.y;
+        }
+
+        function update() {
+            // حركة اللاعب
+            if (keys['ArrowRight']) player.dx = player.speed;
+            else if (keys['ArrowLeft']) player.dx = -player.speed;
+            else player.dx = 0;
+
+            if (keys['ArrowUp'] && player.grounded) {
+                player.dy = player.jumpPower;
+                player.grounded = false;
+            }
+
+            player.dy += gravity;
+            player.x += player.dx;
+            player.y += player.dy;
+
+            // التصادم مع الأرض والمنصات
+            player.grounded = false;
+            platforms.forEach(p => {
+                if (player.dx >= 0 && player.x + player.w > p.x && player.x < p.x + p.w &&
+                    player.y + player.h > p.y && player.y + player.h < p.y + p.h + player.dy) {
+                    player.y = p.y - player.h;
+                    player.dy = 0;
+                    player.grounded = true;
+                }
+            });
+
+            // حدود الشاشة
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.w > 900) player.x = 900 - player.w;
+
+            // جمع الكنوز
+            treasures.forEach(t => {
+                if (!t.collected && checkCollision(player, { x: t.x, y: t.y, w: 50, h: 50 })) {
+                    t.collected = true;
+                    score++;
+                    document.getElementById('score').innerText = score;
+                    if(score === 4) alert("تمت المهمة بنجاح! مدين وأبو وايل حصلوا على كنوز الزوجات!");
+                }
+            });
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function drawCircleImage(img, x, y, size, borderColor) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x + size/2, y + size/2, size/2, 0, Math.PI * 2);
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            ctx.clip();
+            try {
+                ctx.drawImage(img, x, y, size, size);
+            } catch(e) {
+                ctx.fillStyle = "#555";
+                ctx.fillRect(x, y, size, size);
+            }
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // رسم المنصات بشكل فخم (رخامي)
+            ctx.fillStyle = "#D4AF37";
+            platforms.forEach(p => {
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+                ctx.strokeStyle = "#fff";
+                ctx.strokeRect(p.x, p.y, p.w, p.h);
+            });
+
+            // رسم الكنوز (الزوجات) داخل هالة ذهبية
+            treasures.forEach(t => {
+                if (!t.collected) {
+                    drawCircleImage(t.img, t.x, t.y, 60, "#FFD700");
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "bold 14px Cairo";
+                    ctx.textAlign = "center";
+                    ctx.fillText(t.label, t.x + 30, t.y - 10);
+                }
+            });
+
+            // رسم البطل (مدين)
+            drawCircleImage(images.madan, player.x, player.y, player.w, "#fff");
+            
+            // رسم المساعد (أبو وايل) خلفه مباشرة
+            drawCircleImage(images.friend, player.x - 40, player.y + 10, 50, "#D4AF37");
+
+            // اسم الفريق
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 18px Cairo";
+            ctx.fillText("فريق البحث: مدين & أبو وايل", player.x + 35, player.y - 20);
+        }
+
+        // بدء اللعبة
+        images.madan.onload = () => {
+            update();
+        };
+    </script>
+</body>
+</html>
